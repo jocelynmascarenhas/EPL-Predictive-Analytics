@@ -9,7 +9,7 @@ Predictive analytics for English Premier League match outcomes using machine lea
 3. Does short-term form outperform seasonal averages?
 
 ## Current Status
-🚧 **Project In Progress** 
+**Project In Progress** 
 - Milestone 2: Literature Review and Methodology Complete
 - Data Analysis: Starting Soon
 - Model Development: Planned
