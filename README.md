@@ -1,17 +1,22 @@
-# EPL Predictive Analytics Project
-
-This repository hosts the **CIND820 Capstone Project** focusing on predictive analytics for English Premier League (EPL) match outcomes.
+# EPL-Predictive-Analytics
 
 ## Project Goal
-To determine the factors (match stats, home/away advantage, recent form vs. historical average) that most strongly influence EPL match results using advanced machine learning models (XGBoost).
+To develop a robust and time-aware machine learning model for predicting English Premier League (EPL) match outcomes (Home Win, Draw, Away Win) from the perspective of the Home Team. The prediction is framed as a multi-class classification problem.
 
-## Repository Structure
-- `data/`: Raw and cleaned datasets.
-- `notebooks/`: Exploratory Data Analysis (EDA) and iterative modeling notebooks.
-- `src/`: Reusable Python functions for cleaning, feature engineering, and model training.
-- `reports/`: Final visualizations, model interpretation outputs (SHAP), and project reports.
+## Methodology
+The pipeline incorporates rigorous data governance, chronological data integrity checks, advanced feature engineering (e.g., rolling form statistics), and time-series cross-validation to prevent data leakage.
 
-## Setup Instructions
+## Key Features
+1. **Time-Aware Validation:** Uses `TimeSeriesSplit` to ensure models are only trained on past data.
+2. **Rolling Form Features:** Calculates pre-match performance metrics (goals, shots, points) over the last 5 matches.
+3. **Benchmarking:** Evaluates Logistic Regression, Random Forest, and XGBoost based on Macro F1, Log Loss, and MCC.
+
+## Project Structure
+- `data/`: Raw and final cleaned datasets.
+- `src/`: Reusable Python modules (data_module, preprocessing, model_utils).
+- `notebooks/`: Analytical and execution notebooks.
+- `reports/`: Final visualizations (Confusion Matrix, Feature Importance).
+
+## Getting Started
 1. Clone the repository.
-2. Install dependencies: `pip install -r requirements.txt`
-3. Run notebooks starting with `notebooks/01_Data_Cleaning.ipynb`.
+2. Install dependencies using `pip install -r requirements.txt`.
