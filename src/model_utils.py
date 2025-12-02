@@ -8,11 +8,14 @@ from sklearn.metrics import log_loss, matthews_corrcoef, f1_score
 from sklearn.preprocessing import LabelEncoder
 from typing import Dict, List, Any
 
-# Dictionary mapping model names to their estimators
+# Dictionary mapping model names to their estimators (Addressing Feedback 3)
 MODEL_BENCHMARKS = {
-    'LogisticRegression': LogisticRegression(solver='liblinear', multi_class='ovr', random_state=42, max_iter=1000),
-    'RandomForest': RandomForestClassifier(random_state=42, n_estimators=100, max_depth=10),
-    'XGBoost': XGBClassifier(random_state=42, use_label_encoder=False, eval_metric='mlogloss', n_estimators=100, max_depth=5)
+    # Logistic Regression: Baseline model with L1/L2 regularization
+    'LogisticRegression': LogisticRegression(solver='liblinear', multi_class='ovr', random_state=42, max_iter=1000, n_jobs=-1),
+    # Random Forest: Ensemble model for non-linear relationships
+    'RandomForest': RandomForestClassifier(random_state=42, n_estimators=100, max_depth=10, n_jobs=-1),
+    # XGBoost: Leading gradient boosting model
+    'XGBoost': XGBClassifier(random_state=42, use_label_encoder=False, eval_metric='mlogloss', n_estimators=100, max_depth=5, n_jobs=-1)
 }
 
 def evaluate_model(X: pd.DataFrame, y: pd.Series, model_name: str, le: LabelEncoder, n_splits: int = 5) -> Dict[str, Any]:
@@ -27,40 +30,43 @@ def evaluate_model(X: pd.DataFrame, y: pd.Series, model_name: str, le: LabelEnco
     model = MODEL_BENCHMARKS[model_name]
     tscv = TimeSeriesSplit(n_splits=n_splits)
     
-    # Lists to store metrics from each fold
+    # Lists to store metrics from each fold (Addressing Feedback 4)
     macro_f1_scores = []
     log_losses = []
     mcc_scores = []
+    fold_feature_importances = []
     
-    # Key indices used for feature importance stability check
-    fold_indices = []
-
-    # Prepare data (encoding must be done outside the loop for stability)
+    # Prepare data
     y_encoded = le.transform(y)
-    X_features = X.drop(columns=['PL_id'], errors='ignore').values
+    X_features = X.drop(columns=['PL_id'], errors='ignore')
+    feature_names = list(X_features.columns)
+    X_features_np = X_features.values
     
-    for fold, (train_index, test_index) in enumerate(tscv.split(X_features)):
-        X_train, X_test = X_features[train_index], X_features[test_index]
+    for fold, (train_index, test_index) in enumerate(tscv.split(X_features_np)):
+        X_train, X_test = X_features_np[train_index], X_features_np[test_index]
         y_train, y_test = y_encoded[train_index], y_encoded[test_index]
         
         # Train model
         model.fit(X_train, y_train)
         
-        # Predict probabilities for log_loss
+        # Predict probabilities and class labels
         y_pred_proba = model.predict_proba(X_test)
-        
-        # Predict class labels for F1 and MCC
         y_pred = model.predict(X_test)
         
-        # Calculate Metrics
-        macro_f1_scores.append(f1_score(y_test, y_pred, average='macro'))
+        # Calculate Metrics (Feedback 4)
+        macro_f1_scores.append(f1_score(y_test, y_pred, average='macro', zero_division=0))
         log_losses.append(log_loss(y_test, y_pred_proba))
         mcc_scores.append(matthews_corrcoef(y_test, y_pred))
         
-        # Save indices for potential feature importance checks later
-        fold_indices.append(test_index)
+        # Store Feature Importance for stability check (Feedback 6)
+        if hasattr(model, 'feature_importances_'):
+            fold_feature_importances.append(model.feature_importances_)
+        elif hasattr(model, 'coef_'):
+            # For LR, use abs mean coefficients as pseudo-importance
+            coef = np.mean(np.abs(model.coef_), axis=0)
+            fold_feature_importances.append(coef)
         
-        print(f"Fold {fold+1}: Macro F1={macro_f1_scores[-1]:.4f}, Log Loss={log_losses[-1]:.4f}")
+        print(f"Fold {fold+1}: Macro F1={macro_f1_scores[-1]:.4f}, Log Loss={log_losses[-1]:.4f}, MCC={mcc_scores[-1]:.4f}")
 
     # Summarize results
     results = {
@@ -71,14 +77,11 @@ def evaluate_model(X: pd.DataFrame, y: pd.Series, model_name: str, le: LabelEnco
         'log_loss_std': np.std(log_losses),
         'mcc_mean': np.mean(mcc_scores),
         'mcc_std': np.std(mcc_scores),
-        'feature_names': list(X.drop(columns=['PL_id'], errors='ignore').columns),
-        'fold_indices': fold_indices
+        'feature_names': feature_names,
+        'final_y_test': y_test, # y_test from the final fold (for CM plotting)
+        'final_y_pred': y_pred, # y_pred from the final fold (for CM plotting)
+        'fold_importances': np.array(fold_feature_importances) # For stability check
     }
-    
-    # If the model supports feature importance (RF/XGB), store it for later analysis (Feedback 6)
-    if hasattr(model, 'feature_importances_'):
-        # For simplicity, calculate feature importance on the final fold's model
-        results['feature_importances'] = model.feature_importances_
     
     return results
 
