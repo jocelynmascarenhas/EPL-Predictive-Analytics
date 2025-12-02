@@ -11,14 +11,15 @@ def calculate_rolling_team_form(df: pd.DataFrame, window: int = 5) -> pd.DataFra
         prefix = 'home_' if is_home else 'away_'
         
         stats = {
+            # Use original column names for shots and possession
             'goals_scored': f'{prefix}goals_clean',
             'goals_conceded': f'away_goals_clean' if is_home else f'home_goals_clean',
-            'shots': f'{prefix}shots',
+            'shots': f'{prefix}shots', 
             'posse': f'{prefix}posse'
         }
         
-        # FIX 1: Changed 'PL_id' to 'pl_id' (assuming lowercase is correct)
-        team_df = df[[f'{team_type}_team', 'date', 'pl_id'] + list(stats.values())].copy()
+        # FIX: Using 'PL_id'
+        team_df = df[[f'{team_type}_team', 'date', 'PL_id'] + list(stats.values())].copy()
         team_df.rename(columns={
             f'{team_type}_team': 'Team',
             stats['goals_scored']: 'Goals_Scored',
@@ -28,16 +29,20 @@ def calculate_rolling_team_form(df: pd.DataFrame, window: int = 5) -> pd.DataFra
         }, inplace=True)
         
         if is_home:
+            # Requires HomeTeamResult to be calculated first
             team_df['Points'] = df['HomeTeamResult'].map({'W': 3, 'D': 1, 'L': 0})
         else:
             team_df['Points'] = df['HomeTeamResult'].map({'W': 0, 'D': 1, 'L': 3}) 
 
         return team_df
 
+    # CRITICAL: We need 'HomeTeamResult' to exist before this call.
+    # The clean_and_prepare_data function creates it before calling this helper, so this is safe.
+    
     home_view = transform_match_to_team_view(df, 'home')
     away_view = transform_match_to_team_view(df, 'away')
-    # FIX 2: Changed 'PL_id' to 'pl_id'
-    all_team_matches = pd.concat([home_view, away_view]).sort_values(by=['date', 'pl_id'])
+    # FIX: Using 'PL_id'
+    all_team_matches = pd.concat([home_view, away_view]).sort_values(by=['date', 'PL_id'])
     
     form_cols = ['Goals_Scored', 'Goals_Conceded', 'Shots', 'Possession', 'Points']
     
@@ -47,17 +52,15 @@ def calculate_rolling_team_form(df: pd.DataFrame, window: int = 5) -> pd.DataFra
     
     df = df.merge(
         rolling_stats.rename(columns=lambda x: f'Form_Home_{x}' if x in form_cols else x),
-        # Changed 'PL_id' to 'pl_id' in merge keys
-        left_on=['pl_id', 'home_team'],
-        right_on=['pl_id', 'Team'],
+        left_on=['PL_id', 'home_team'],
+        right_on=['PL_id', 'Team'],
         how='left'
     ).drop(columns=['Team'], errors='ignore')
 
     df = df.merge(
         rolling_stats.rename(columns=lambda x: f'Form_Away_{x}' if x in form_cols else x),
-        # Changed 'PL_id' to 'pl_id' in merge keys
-        left_on=['pl_id', 'away_team'],
-        right_on=['pl_id', 'Team'],
+        left_on=['PL_id', 'away_team'],
+        right_on=['PL_id', 'Team'],
         how='left'
     ).drop(columns=['Team'], errors='ignore')
     
@@ -66,12 +69,8 @@ def calculate_rolling_team_form(df: pd.DataFrame, window: int = 5) -> pd.DataFra
     
     return df
     
-# --- UPDATED clean_and_prepare_data FUNCTION (WITH BUG FIX) ---
+# --- UPDATED clean_and_prepare_data FUNCTION ---
 def clean_and_prepare_data(df: pd.DataFrame) -> pd.DataFrame:
-    """
-    Centralized preprocessing function: fixes types, creates target, adds rolling form, 
-    and removes leakage features.
-    """
     print("--- Running Consolidated Preprocessing Module ---")
 
     # 1. Type Conversions / Schema Definition
@@ -84,19 +83,20 @@ def clean_and_prepare_data(df: pd.DataFrame) -> pd.DataFrame:
     
     df['date'] = pd.to_datetime(df['date'], format='%m/%d/%Y', errors='coerce')
 
-    # FIX 3: Changed 'PL_id' to 'pl_id' in sorting list
-    sort_cols = [col for col in ['date', 'kickoff', 'pl_id'] if col in df.columns]
-    df = df.sort_values(by=sort_cols, ascending=True).reset_index(drop=True)
-    print("Data types cleaned and data sorted chronologically.")
-
-    # 2. Target Variable Creation (HomeTeamResult)
+    # 2. Target Variable Creation (HomeTeamResult) - Must be before rolling form calculation
     result_map = {'H': 'W', 'D': 'D', 'A': 'L'}
     df['HomeTeamResult'] = df['result'].map(result_map)
     print("Target variable 'HomeTeamResult' created successfully.")
     
+    # FIX: Using 'PL_id' for chronological sorting
+    sort_cols = [col for col in ['date', 'kickoff', 'PL_id'] if col in df.columns]
+    df = df.sort_values(by=sort_cols, ascending=True).reset_index(drop=True)
+    print("Data types cleaned and data sorted chronologically.")
+
+    # 3. Calculate Rolling Form
     df = calculate_rolling_team_form(df, window=5)
     
-    # 3. Data Leakage Rules & Feature Filtering
+    # 4. Data Leakage Rules & Feature Filtering
     LEAKAGE_COLS = [
         'home_goals', 'away_goals', 'home_goals_clean', 'away_goals_clean', 
         'result', 'home_score', 'away_score', 'home_ht_score', 'away_ht_score', 
@@ -116,8 +116,8 @@ def clean_and_prepare_data(df: pd.DataFrame) -> pd.DataFrame:
 
     # Re-attach target and ID for final output
     df_cleaned['HomeTeamResult'] = df['HomeTeamResult']
-    # FIX 4: Changed 'PL_id' to 'pl_id' for re-attachment check and column name
-    if 'pl_id' in df.columns:
-        df_cleaned['pl_id'] = df['pl_id']
+    # FIX: Using 'PL_id' for re-attachment
+    if 'PL_id' in df.columns:
+        df_cleaned['PL_id'] = df['PL_id']
 
     return df_cleaned
